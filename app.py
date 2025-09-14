@@ -1,50 +1,93 @@
 import streamlit as st
-import google.generativeai as genai
+from openai import OpenAI
 
-# Configure Gemini API
-genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+# -------------------
+# Setup
+# -------------------
+st.set_page_config(page_title="Funding & Scholarship Finder", page_icon="💰", layout="wide")
+st.title("💡 Startup Funding & Scholarship Finder")
 
-# Select Gemini model (flash = free & fast)
-model = genai.GenerativeModel("gemini-1.5-flash")
+# Instructions
+st.write("""
+Welcome to Operations Sync.
+Enter your information below, and this tool will generate a report of possible **organizations, funds, and scholarships**  
+available for startups and businesses in your city and country.
+""")
 
-# Streamlit app
-st.set_page_config(page_title="Startup Funding Finder", page_icon="💡", layout="centered")
+# -------------------
+# Input Form
+# -------------------
+with st.form("input_form"):
+    name = st.text_input("Your Name (optional):")
+    city = st.text_input("City you live in:")
+    country = st.text_input("Country you live in:")
+    business_type = st.selectbox("Business/Startup Type:", [
+        "Technology",
+        "Retail",
+        "Education",
+        "Healthcare",
+        "Agriculture",
+        "Other"
+    ])
+    stage = st.radio("Stage of your business:", ["Idea", "Early Stage", "Growth", "Established"])
+    need = st.multiselect("What kind of support are you looking for?", [
+        "Funding",
+        "Scholarship",
+        "Mentorship",
+        "Incubation/Accelerator",
+        "Government Grants"
+    ])
+    submitted = st.form_submit_button("🔍 Find Opportunities")
 
-st.title("💡 Startup Funding Finder")
-st.write("Enter customer details to find **funds, organizations, and scholarships** available in their city and country.")
+# -------------------
+# Backend Processing
+# -------------------
+if submitted:
+    if city and country and business_type:
+        with st.spinner("Generating your report... Please wait ⏳"):
+            # Connect to OpenAI
+            client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Input form
-with st.form("customer_info"):
-    name = st.text_input("Customer Name")
-    city = st.text_input("City")
-    country = st.text_input("Country")
-    business_type = st.text_input("Business Type / Industry")
-    stage = st.selectbox("Business Stage", ["Idea", "Prototype", "Early Startup", "Growth", "Established"])
-    submit = st.form_submit_button("Find Opportunities 🚀")
-
-# Process input
-if submit:
-    if not (city and country and business_type):
-        st.warning("⚠️ Please fill in at least city, country, and business type.")
-    else:
-        with st.spinner("🔎 Searching for opportunities..."):
-            # Prompt for Gemini
+            # Build prompt
             prompt = f"""
-            A customer named {name if name else "N/A"} is based in {city}, {country}.
-            They are working in the {business_type} sector and their business stage is {stage}.
+            The user is located in {city}, {country}.
+            Their business type is {business_type}, and stage is {stage}.
+            They are looking for: {", ".join(need)}.
             
-            Provide a structured report with:
-            1. Local organizations that support startups in {city}, {country}.
-            2. National and international funds/grants they might be eligible for.
-            3. Scholarships or government support programs for entrepreneurs.
-            4. Practical next steps they should take.
-
-            Make the response clear, professional, and actionable.
+            Please generate a detailed report of possible:
+            - Government grants
+            - Private funds
+            - Scholarships
+            - Local organizations
+            - International opportunities
+            
+            Focus only on relevant programs available in {country}, and preferably in {city}.
+            Present the output in a structured, easy-to-read format with bullet points and sections.
             """
 
-            # Generate response
-            response = model.generate_content(prompt)
+            # Call ChatGPT
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.7,
+                max_tokens=700
+            )
 
-            # Display result
-            st.subheader("📑 Funding & Support Report")
-            st.write(response.text)
+            result = response.choices[0].message.content
+
+        # -------------------
+        # Output Report
+        # -------------------
+        st.success("✅ Report Generated!")
+        st.subheader("📑 Funding & Scholarship Opportunities Report")
+        st.write(result)
+
+        # Option to download report
+        st.download_button(
+            label="📥 Download Report",
+            data=result,
+            file_name=f"funding_report_{city}_{country}.txt",
+            mime="text/plain"
+        )
+    else:
+        st.error("❌ Please fill at least City, Country, and Business Type.")
